@@ -1,0 +1,317 @@
+import pandas as pd
+import numpy as np
+from typing import Dict, Any, List, Optional
+from risk_calculator import RiskCalculator
+
+class PopulationAnalytics:
+    """
+    Population health analytics for processing and analyzing patient cohorts
+    """
+    
+    def __init__(self):
+        self.risk_calculator = RiskCalculator()
+        self.required_columns = [
+            'age', 'gender', 'height_cm', 'weight_kg', 'systolic_bp', 'diastolic_bp',
+            'glucose', 'cholesterol', 'hdl', 'ldl', 'smoking', 'exercise_days',
+            'alcohol_drinks', 'family_diabetes', 'family_heart_disease', 'family_hypertension'
+        ]
+    
+    def validate_population_data(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Validate population dataset for required columns and data quality
+        """
+        validation_result = {
+            'valid': True,
+            'missing_columns': [],
+            'data_quality_issues': [],
+            'summary': {}
+        }
+        
+        # Check for required columns
+        missing_columns = [col for col in self.required_columns if col not in df.columns]
+        if missing_columns:
+            validation_result['missing_columns'] = missing_columns
+            validation_result['valid'] = False
+        
+        # Check data quality
+        if validation_result['valid']:
+            # Age validation
+            if df['age'].isnull().any() or df['age'].lt(18).any() or df['age'].gt(120).any():
+                validation_result['data_quality_issues'].append("Invalid age values detected")
+            
+            # BMI calculation and validation
+            try:
+                df['bmi'] = df['weight_kg'] / (df['height_cm'] / 100) ** 2
+                if (df['bmi'] < 10).any() or (df['bmi'] > 100).any():
+                    validation_result['data_quality_issues'].append("Extreme BMI values detected")
+            except:
+                validation_result['data_quality_issues'].append("Unable to calculate BMI from height/weight")
+            
+            # Blood pressure validation
+            if (df['systolic_bp'] < 70).any() or (df['systolic_bp'] > 250).any():
+                validation_result['data_quality_issues'].append("Invalid systolic blood pressure values")
+            
+            if (df['diastolic_bp'] < 40).any() or (df['diastolic_bp'] > 150).any():
+                validation_result['data_quality_issues'].append("Invalid diastolic blood pressure values")
+            
+            # Lab values validation
+            if (df['glucose'] < 50).any() or (df['glucose'] > 500).any():
+                validation_result['data_quality_issues'].append("Invalid glucose values")
+            
+            if (df['cholesterol'] < 100).any() or (df['cholesterol'] > 500).any():
+                validation_result['data_quality_issues'].append("Invalid cholesterol values")
+        
+        # Generate summary statistics
+        if validation_result['valid'] and not validation_result['data_quality_issues']:
+            validation_result['summary'] = {
+                'total_records': len(df),
+                'age_range': f"{df['age'].min()}-{df['age'].max()}",
+                'gender_distribution': df['gender'].value_counts().to_dict(),
+                'avg_bmi': df['bmi'].mean(),
+                'missing_data_percentage': (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+            }
+        
+        return validation_result
+    
+    def process_population_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
+        """
+        Process population data and calculate risk assessments for each patient
+        """
+        # Validate data first
+        validation = self.validate_population_data(df)
+        
+        if not validation['valid']:
+            raise ValueError(f"Data validation failed: {validation}")
+        
+        if validation['data_quality_issues']:
+            print(f"Warning: Data quality issues detected: {validation['data_quality_issues']}")
+        
+        # Create a copy for processing
+        processed_df = df.copy()
+        
+        # Calculate BMI if not present
+        if 'bmi' not in processed_df.columns:
+            processed_df['bmi'] = processed_df['weight_kg'] / (processed_df['height_cm'] / 100) ** 2
+        
+        # Initialize risk columns
+        processed_df['diabetes_risk'] = 0.0
+        processed_df['heart_disease_risk'] = 0.0
+        processed_df['hypertension_risk'] = 0.0
+        processed_df['overall_risk_level'] = 'Low'
+        
+        # Calculate risks for each patient
+        for idx, row in processed_df.iterrows():
+            try:
+                # Prepare patient data dictionary
+                patient_data = {
+                    'age': row['age'],
+                    'gender': row['gender'],
+                    'height_cm': row['height_cm'],
+                    'weight_kg': row['weight_kg'],
+                    'bmi': row['bmi'],
+                    'systolic_bp': row['systolic_bp'],
+                    'diastolic_bp': row['diastolic_bp'],
+                    'resting_hr': row.get('resting_hr', 70),  # Default if not provided
+                    'glucose': row['glucose'],
+                    'cholesterol': row['cholesterol'],
+                    'hdl': row['hdl'],
+                    'ldl': row['ldl'],
+                    'smoking': row['smoking'],
+                    'exercise_days': row['exercise_days'],
+                    'alcohol_drinks': row['alcohol_drinks'],
+                    'family_diabetes': row['family_diabetes'],
+                    'family_heart_disease': row['family_heart_disease'],
+                    'family_hypertension': row['family_hypertension'],
+                    'current_medications': row.get('current_medications', ''),
+                    'allergies': row.get('allergies', '')
+                }
+                
+                # Calculate risks
+                risk_results = self.risk_calculator.calculate_all_risks(patient_data)
+                
+                # Store risk percentages
+                processed_df.at[idx, 'diabetes_risk'] = risk_results['diabetes']['risk_percentage']
+                processed_df.at[idx, 'heart_disease_risk'] = risk_results['heart_disease']['risk_percentage']
+                processed_df.at[idx, 'hypertension_risk'] = risk_results['hypertension']['risk_percentage']
+                
+                # Determine overall risk level
+                max_risk = max(
+                    risk_results['diabetes']['risk_percentage'],
+                    risk_results['heart_disease']['risk_percentage'],
+                    risk_results['hypertension']['risk_percentage']
+                )
+                
+                if max_risk >= 70:
+                    overall_risk = 'High'
+                elif max_risk >= 40:
+                    overall_risk = 'Medium'
+                else:
+                    overall_risk = 'Low'
+                
+                processed_df.at[idx, 'overall_risk_level'] = overall_risk
+                
+            except Exception as e:
+                print(f"Error processing row {idx}: {str(e)}")
+                # Set default values for failed calculations
+                processed_df.at[idx, 'diabetes_risk'] = 0.0
+                processed_df.at[idx, 'heart_disease_risk'] = 0.0
+                processed_df.at[idx, 'hypertension_risk'] = 0.0
+                processed_df.at[idx, 'overall_risk_level'] = 'Unknown'
+        
+        return processed_df
+    
+    def generate_population_insights(self, df: pd.DataFrame) -> List[str]:
+        """
+        Generate insights and recommendations for the population
+        """
+        insights = []
+        
+        # Risk distribution insights
+        high_risk_count = len(df[df['overall_risk_level'] == 'High'])
+        medium_risk_count = len(df[df['overall_risk_level'] == 'Medium'])
+        low_risk_count = len(df[df['overall_risk_level'] == 'Low'])
+        total_patients = len(df)
+        
+        high_risk_pct = (high_risk_count / total_patients) * 100
+        medium_risk_pct = (medium_risk_count / total_patients) * 100
+        
+        insights.append(f"{high_risk_pct:.1f}% of patients are at high risk, requiring immediate intervention")
+        insights.append(f"{medium_risk_pct:.1f}% of patients are at medium risk, needing monitoring and lifestyle changes")
+        
+        # Age-related insights
+        high_risk_patients = df[df['overall_risk_level'] == 'High']
+        if len(high_risk_patients) > 0:
+            avg_age_high_risk = high_risk_patients['age'].mean()
+            insights.append(f"Average age of high-risk patients is {avg_age_high_risk:.1f} years")
+        
+        # BMI insights
+        obesity_rate = len(df[df['bmi'] >= 30]) / total_patients * 100
+        overweight_rate = len(df[(df['bmi'] >= 25) & (df['bmi'] < 30)]) / total_patients * 100
+        insights.append(f"Obesity rate: {obesity_rate:.1f}%, Overweight rate: {overweight_rate:.1f}%")
+        
+        # Smoking insights
+        current_smokers = len(df[df['smoking'] == 'Current']) / total_patients * 100
+        if current_smokers > 20:
+            insights.append(f"High smoking rate ({current_smokers:.1f}%) - implement smoking cessation programs")
+        
+        # Exercise insights
+        sedentary_patients = len(df[df['exercise_days'] <= 1]) / total_patients * 100
+        if sedentary_patients > 30:
+            insights.append(f"High sedentary rate ({sedentary_patients:.1f}%) - promote physical activity programs")
+        
+        # Diabetes risk insights
+        diabetes_high_risk = len(df[df['diabetes_risk'] >= 70]) / total_patients * 100
+        if diabetes_high_risk > 10:
+            insights.append(f"Consider diabetes prevention program - {diabetes_high_risk:.1f}% at high diabetes risk")
+        
+        # Hypertension insights
+        hypertension_patients = len(df[(df['systolic_bp'] >= 140) | (df['diastolic_bp'] >= 90)]) / total_patients * 100
+        if hypertension_patients > 25:
+            insights.append(f"High hypertension prevalence ({hypertension_patients:.1f}%) - implement BP monitoring program")
+        
+        # Cholesterol insights
+        high_cholesterol = len(df[df['cholesterol'] >= 240]) / total_patients * 100
+        if high_cholesterol > 15:
+            insights.append(f"Consider cholesterol management program - {high_cholesterol:.1f}% have high cholesterol")
+        
+        # Gender-specific insights
+        gender_risk = df.groupby('gender')['overall_risk_level'].apply(
+            lambda x: (x == 'High').sum() / len(x) * 100
+        )
+        for gender, risk_pct in gender_risk.items():
+            if risk_pct > 20:
+                insights.append(f"{gender} patients show higher risk rates ({risk_pct:.1f}%) - consider targeted interventions")
+        
+        # Family history insights
+        family_diabetes_risk = df[df['family_diabetes'] == True]['diabetes_risk'].mean()
+        family_heart_risk = df[df['family_heart_disease'] == True]['heart_disease_risk'].mean()
+        
+        if family_diabetes_risk > 50:
+            insights.append("Patients with family diabetes history show significantly higher risk - enhance screening")
+        
+        if family_heart_risk > 50:
+            insights.append("Patients with family heart disease history show significantly higher risk - enhance cardiac screening")
+        
+        # Population-level recommendations
+        if high_risk_pct > 20:
+            insights.append("Consider implementing comprehensive chronic disease management program")
+        
+        if obesity_rate > 30:
+            insights.append("Implement weight management and nutrition education programs")
+        
+        return insights
+    
+    def calculate_population_statistics(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate comprehensive population statistics
+        """
+        stats = {}
+        
+        # Basic demographics
+        stats['demographics'] = {
+            'total_patients': len(df),
+            'age_statistics': {
+                'mean': df['age'].mean(),
+                'median': df['age'].median(),
+                'std': df['age'].std(),
+                'min': df['age'].min(),
+                'max': df['age'].max()
+            },
+            'gender_distribution': df['gender'].value_counts().to_dict()
+        }
+        
+        # Health metrics
+        stats['health_metrics'] = {
+            'bmi_statistics': {
+                'mean': df['bmi'].mean(),
+                'median': df['bmi'].median(),
+                'obesity_rate': len(df[df['bmi'] >= 30]) / len(df) * 100,
+                'overweight_rate': len(df[(df['bmi'] >= 25) & (df['bmi'] < 30)]) / len(df) * 100
+            },
+            'blood_pressure': {
+                'mean_systolic': df['systolic_bp'].mean(),
+                'mean_diastolic': df['diastolic_bp'].mean(),
+                'hypertension_rate': len(df[(df['systolic_bp'] >= 140) | (df['diastolic_bp'] >= 90)]) / len(df) * 100
+            },
+            'metabolic_markers': {
+                'mean_glucose': df['glucose'].mean(),
+                'mean_cholesterol': df['cholesterol'].mean(),
+                'mean_hdl': df['hdl'].mean(),
+                'mean_ldl': df['ldl'].mean()
+            }
+        }
+        
+        # Risk statistics
+        stats['risk_statistics'] = {
+            'diabetes_risk': {
+                'mean': df['diabetes_risk'].mean(),
+                'high_risk_count': len(df[df['diabetes_risk'] >= 70]),
+                'high_risk_percentage': len(df[df['diabetes_risk'] >= 70]) / len(df) * 100
+            },
+            'heart_disease_risk': {
+                'mean': df['heart_disease_risk'].mean(),
+                'high_risk_count': len(df[df['heart_disease_risk'] >= 70]),
+                'high_risk_percentage': len(df[df['heart_disease_risk'] >= 70]) / len(df) * 100
+            },
+            'hypertension_risk': {
+                'mean': df['hypertension_risk'].mean(),
+                'high_risk_count': len(df[df['hypertension_risk'] >= 70]),
+                'high_risk_percentage': len(df[df['hypertension_risk'] >= 70]) / len(df) * 100
+            },
+            'overall_risk_distribution': df['overall_risk_level'].value_counts().to_dict()
+        }
+        
+        # Lifestyle factors
+        stats['lifestyle_factors'] = {
+            'smoking_distribution': df['smoking'].value_counts().to_dict(),
+            'exercise_statistics': {
+                'mean_exercise_days': df['exercise_days'].mean(),
+                'sedentary_percentage': len(df[df['exercise_days'] <= 1]) / len(df) * 100
+            },
+            'alcohol_statistics': {
+                'mean_drinks_per_week': df['alcohol_drinks'].mean(),
+                'excessive_drinking_percentage': len(df[df['alcohol_drinks'] > 14]) / len(df) * 100
+            }
+        }
+        
+        return stats
