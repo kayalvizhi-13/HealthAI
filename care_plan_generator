@@ -1,0 +1,371 @@
+from typing import Dict, Any, List
+import random
+import pandas as pd
+
+class CarePlanGenerator:
+    """
+    Generate personalized care plans based on risk assessment results
+    """
+    
+    def __init__(self):
+        self.priority_levels = {
+            'Critical': 'Immediate medical attention required',
+            'High': 'Urgent intervention needed',
+            'Medium': 'Regular monitoring and lifestyle changes',
+            'Low': 'Preventive care and health maintenance'
+        }
+    
+    def determine_priority_level(self, risk_results: Dict[str, Dict[str, Any]]) -> str:
+        """
+        Determine overall priority level based on risk results
+        """
+        max_risk = 0
+        for condition_risk in risk_results.values():
+            max_risk = max(max_risk, condition_risk['risk_percentage'])
+        
+        if max_risk >= 85:
+            return 'Critical'
+        elif max_risk >= 70:
+            return 'High'
+        elif max_risk >= 40:
+            return 'Medium'
+        else:
+            return 'Low'
+    
+    def determine_primary_focus(self, risk_results: Dict[str, Dict[str, Any]]) -> str:
+        """
+        Determine primary focus area based on highest risk condition
+        """
+        max_risk = 0
+        primary_condition = 'General Health'
+        
+        for condition, result in risk_results.items():
+            if result['risk_percentage'] > max_risk:
+                max_risk = result['risk_percentage']
+                primary_condition = condition.replace('_', ' ').title()
+        
+        return primary_condition
+    
+    def generate_medical_recommendations(self, patient_data: Dict[str, Any], 
+                                       risk_results: Dict[str, Dict[str, Any]]) -> List[str]:
+        """
+        Generate medical recommendations based on risk factors
+        """
+        recommendations = []
+        
+        # Diabetes-specific recommendations
+        diabetes_risk = risk_results['diabetes']['risk_percentage']
+        if diabetes_risk >= 70:
+            recommendations.extend([
+                "Immediate consultation with endocrinologist or primary care physician",
+                "Comprehensive metabolic panel including HbA1c and glucose tolerance test",
+                "Consider initiation of metformin if pre-diabetic (consult physician)"
+            ])
+        elif diabetes_risk >= 40:
+            recommendations.extend([
+                "Annual diabetes screening with fasting glucose and HbA1c",
+                "Regular monitoring of blood glucose levels"
+            ])
+        
+        # Heart disease recommendations
+        heart_risk = risk_results['heart_disease']['risk_percentage']
+        if heart_risk >= 70:
+            recommendations.extend([
+                "Cardiology consultation for comprehensive cardiovascular assessment",
+                "Stress test and echocardiogram evaluation",
+                "Consider statin therapy for cholesterol management (physician consultation required)"
+            ])
+        elif heart_risk >= 40:
+            recommendations.extend([
+                "Annual lipid panel and cardiovascular risk assessment",
+                "Blood pressure monitoring and management"
+            ])
+        
+        # Hypertension recommendations
+        hypertension_risk = risk_results['hypertension']['risk_percentage']
+        if hypertension_risk >= 70:
+            recommendations.extend([
+                "Immediate blood pressure management consultation",
+                "24-hour ambulatory blood pressure monitoring",
+                "Evaluation for target organ damage (kidney, heart, eyes)"
+            ])
+        elif hypertension_risk >= 40:
+            recommendations.extend([
+                "Regular blood pressure monitoring (home and clinical)",
+                "Assessment for secondary hypertension causes"
+            ])
+        
+        # General high-risk recommendations
+        max_risk = max(result['risk_percentage'] for result in risk_results.values())
+        if max_risk >= 70:
+            recommendations.extend([
+                "Comprehensive annual physical examination",
+                "Medication adherence counseling and review",
+                "Consider referral to specialized chronic disease management program"
+            ])
+        
+        return recommendations
+    
+    def generate_lifestyle_recommendations(self, patient_data: Dict[str, Any], 
+                                         risk_results: Dict[str, Dict[str, Any]]) -> List[str]:
+        """
+        Generate lifestyle modification recommendations
+        """
+        recommendations = []
+        
+        # Exercise recommendations
+        exercise_days = patient_data['exercise_days']
+        if exercise_days < 3:
+            recommendations.append("Gradually increase to 150 minutes of moderate aerobic activity per week")
+            recommendations.append("Include strength training exercises 2-3 times per week")
+        elif exercise_days < 5:
+            recommendations.append("Maintain current exercise routine and consider adding variety")
+        
+        # Smoking cessation
+        if patient_data['smoking'] == 'Current':
+            recommendations.extend([
+                "Immediate smoking cessation - consider nicotine replacement therapy",
+                "Join smoking cessation program or counseling services",
+                "Avoid secondhand smoke exposure"
+            ])
+        elif patient_data['smoking'] == 'Former':
+            recommendations.append("Continue abstaining from tobacco products")
+        
+        # Weight management
+        bmi = patient_data['bmi']
+        if bmi >= 30:
+            recommendations.extend([
+                "Weight reduction program targeting 5-10% body weight loss",
+                "Consider consultation with registered dietitian",
+                "Behavioral modification therapy for sustainable weight management"
+            ])
+        elif bmi >= 25:
+            recommendations.append("Maintain healthy weight through balanced diet and regular exercise")
+        
+        # Alcohol moderation
+        alcohol_drinks = patient_data['alcohol_drinks']
+        if alcohol_drinks > 14:
+            recommendations.append("Reduce alcohol consumption to moderate levels (≤14 drinks/week)")
+        elif alcohol_drinks > 7:
+            recommendations.append("Consider reducing alcohol intake to lower cardiovascular risk")
+        
+        # Stress management
+        max_risk = max(result['risk_percentage'] for result in risk_results.values())
+        if max_risk >= 40:
+            recommendations.extend([
+                "Implement stress reduction techniques (meditation, yoga, deep breathing)",
+                "Ensure adequate sleep (7-9 hours per night)",
+                "Consider stress management counseling if needed"
+            ])
+        
+        return recommendations
+    
+    def generate_dietary_recommendations(self, patient_data: Dict[str, Any], 
+                                       risk_results: Dict[str, Dict[str, Any]]) -> List[str]:
+        """
+        Generate dietary recommendations based on risk factors
+        """
+        recommendations = []
+        
+        # Diabetes-focused diet
+        diabetes_risk = risk_results['diabetes']['risk_percentage']
+        if diabetes_risk >= 40:
+            recommendations.extend([
+                "Follow low glycemic index diet with complex carbohydrates",
+                "Limit refined sugars and processed foods",
+                "Include high-fiber foods (vegetables, legumes, whole grains)",
+                "Practice portion control and regular meal timing"
+            ])
+        
+        # Heart-healthy diet
+        heart_risk = risk_results['heart_disease']['risk_percentage']
+        cholesterol = patient_data['cholesterol']
+        if heart_risk >= 40 or cholesterol >= 200:
+            recommendations.extend([
+                "Adopt Mediterranean or DASH diet pattern",
+                "Increase omega-3 fatty acids (fish, walnuts, flax seeds)",
+                "Limit saturated fats and trans fats",
+                "Include plant stanols and sterols for cholesterol management"
+            ])
+        
+        # Hypertension diet
+        hypertension_risk = risk_results['hypertension']['risk_percentage']
+        if hypertension_risk >= 40:
+            recommendations.extend([
+                "Reduce sodium intake to <2,300mg per day (ideally <1,500mg)",
+                "Increase potassium-rich foods (bananas, oranges, spinach)",
+                "Limit processed and packaged foods",
+                "Use herbs and spices instead of salt for flavoring"
+            ])
+        
+        # General healthy eating
+        recommendations.extend([
+            "Consume 5-9 servings of fruits and vegetables daily",
+            "Choose whole grains over refined grains",
+            "Include lean protein sources (fish, poultry, legumes)",
+            "Stay adequately hydrated (8-10 glasses of water daily)"
+        ])
+        
+        return recommendations
+    
+    def generate_monitoring_parameters(self, patient_data: Dict[str, Any], 
+                                     risk_results: Dict[str, Dict[str, Any]]) -> List[Dict[str, str]]:
+        """
+        Generate key monitoring parameters and target values
+        """
+        parameters = []
+        
+        # Blood pressure monitoring
+        hypertension_risk = risk_results['hypertension']['risk_percentage']
+        if hypertension_risk >= 40:
+            parameters.append({
+                'Parameter': 'Blood Pressure',
+                'Target': '<130/80 mmHg',
+                'Frequency': 'Daily home monitoring'
+            })
+        else:
+            parameters.append({
+                'Parameter': 'Blood Pressure',
+                'Target': '<120/80 mmHg',
+                'Frequency': 'Weekly monitoring'
+            })
+        
+        # Blood glucose monitoring
+        diabetes_risk = risk_results['diabetes']['risk_percentage']
+        if diabetes_risk >= 70:
+            parameters.append({
+                'Parameter': 'Fasting Glucose',
+                'Target': '70-100 mg/dL',
+                'Frequency': 'Daily monitoring'
+            })
+            parameters.append({
+                'Parameter': 'HbA1c',
+                'Target': '<7.0%',
+                'Frequency': 'Every 3 months'
+            })
+        elif diabetes_risk >= 40:
+            parameters.append({
+                'Parameter': 'Fasting Glucose',
+                'Target': '70-100 mg/dL',
+                'Frequency': 'Weekly monitoring'
+            })
+        
+        # Weight monitoring
+        bmi = patient_data['bmi']
+        if bmi >= 25:
+            parameters.append({
+                'Parameter': 'Body Weight',
+                'Target': f"Target BMI: 18.5-24.9",
+                'Frequency': 'Weekly weighing'
+            })
+        
+        # Cholesterol monitoring
+        heart_risk = risk_results['heart_disease']['risk_percentage']
+        if heart_risk >= 40:
+            parameters.append({
+                'Parameter': 'LDL Cholesterol',
+                'Target': '<100 mg/dL (or <70 if high risk)',
+                'Frequency': 'Every 6 months'
+            })
+            parameters.append({
+                'Parameter': 'HDL Cholesterol',
+                'Target': '>40 mg/dL (men), >50 mg/dL (women)',
+                'Frequency': 'Every 6 months'
+            })
+        
+        return parameters
+    
+    def generate_follow_up_schedule(self, risk_results: Dict[str, Dict[str, Any]]) -> List[str]:
+        """
+        Generate follow-up appointment schedule
+        """
+        schedule = []
+        max_risk = max(result['risk_percentage'] for result in risk_results.values())
+        
+        if max_risk >= 85:
+            schedule.extend([
+                "Primary care follow-up in 1-2 weeks",
+                "Specialist consultation within 1 month",
+                "Laboratory follow-up in 2-4 weeks"
+            ])
+        elif max_risk >= 70:
+            schedule.extend([
+                "Primary care follow-up in 1 month",
+                "Specialist consultation within 2-3 months",
+                "Laboratory follow-up in 1-2 months"
+            ])
+        elif max_risk >= 40:
+            schedule.extend([
+                "Primary care follow-up in 3 months",
+                "Annual specialist evaluation if indicated",
+                "Laboratory monitoring every 3-6 months"
+            ])
+        else:
+            schedule.extend([
+                "Annual primary care visit",
+                "Routine health screening as per guidelines",
+                "Laboratory monitoring annually"
+            ])
+        
+        return schedule
+    
+    def generate_educational_resources(self, risk_results: Dict[str, Dict[str, Any]]) -> List[str]:
+        """
+        Generate educational resources based on risk profile
+        """
+        resources = []
+        
+        # Diabetes education
+        if risk_results['diabetes']['risk_percentage'] >= 40:
+            resources.extend([
+                "American Diabetes Association patient education materials",
+                "Diabetes prevention program information",
+                "Carbohydrate counting and meal planning resources"
+            ])
+        
+        # Heart disease education
+        if risk_results['heart_disease']['risk_percentage'] >= 40:
+            resources.extend([
+                "American Heart Association heart-healthy lifestyle guide",
+                "Cholesterol management educational materials",
+                "Cardiac rehabilitation program information"
+            ])
+        
+        # Hypertension education
+        if risk_results['hypertension']['risk_percentage'] >= 40:
+            resources.extend([
+                "DASH diet educational materials",
+                "Home blood pressure monitoring training",
+                "Medication adherence resources"
+            ])
+        
+        # General health education
+        resources.extend([
+            "CDC chronic disease prevention resources",
+            "Nutrition and exercise guidelines from health authorities",
+            "Stress management and mental health resources"
+        ])
+        
+        return resources
+    
+    def generate_care_plan(self, patient_data: Dict[str, Any], 
+                          risk_results: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Generate comprehensive care plan
+        """
+        priority_level = self.determine_priority_level(risk_results)
+        primary_focus = self.determine_primary_focus(risk_results)
+        
+        care_plan = {
+            'generated_at': f"Generated on {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            'priority_level': priority_level,
+            'primary_focus': primary_focus,
+            'medical_recommendations': self.generate_medical_recommendations(patient_data, risk_results),
+            'lifestyle_recommendations': self.generate_lifestyle_recommendations(patient_data, risk_results),
+            'dietary_recommendations': self.generate_dietary_recommendations(patient_data, risk_results),
+            'monitoring_parameters': self.generate_monitoring_parameters(patient_data, risk_results),
+            'follow_up_schedule': self.generate_follow_up_schedule(risk_results),
+            'educational_resources': self.generate_educational_resources(risk_results)
+        }
+        
+        return care_plan
